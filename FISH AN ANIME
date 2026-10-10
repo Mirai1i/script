@@ -1,0 +1,684 @@
+--[[
+    Fish an Anime RNG 🎲 - Full Automation Hub
+    UI Library: Rayfield Gen2
+    Author: Antigravity
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
+
+local LocalPlayer = Players.LocalPlayer
+local Remotes = ReplicatedStorage:WaitForChild("Remotes", 15)
+
+-- Load Rayfield Gen2
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
+
+local Window = Rayfield:CreateWindow({
+    name = "Fish an Anime RNG 🎲 | Ultimate Hub",
+    subtitle = "Rayfield Gen2",
+    sidebarLayout = true,
+    theme = "cobalt",
+    configuration = {
+        autoSave = true,
+        autoLoad = true,
+        fileName = "FishAnAnimeRNG_Config"
+    }
+})
+
+-- State flags
+local Config = {
+    AutoFish = false,
+    FishClickDelay = 0.1,
+    SelectedPond = "Nearest",
+    AutoEquipBest = false,
+    AutoOpenCases = false,
+    SelectedCase = "All",
+    AutoQuests = false,
+    AutoUpgrades = false,
+    AutoRebirth = false,
+    AutoDailyRewards = false,
+    AutoPotions = false,
+    AntiAFK = true,
+    WalkSpeed = 16,
+    JumpPower = 50,
+    Noclip = false,
+    InfiniteJump = false,
+    RareAlert = true
+}
+
+-- Helpers
+local function getHRP()
+    local char = LocalPlayer.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getHumanoid()
+    local char = LocalPlayer.Character
+    return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function notify(title, content)
+    pcall(function()
+        Window:Notify({
+            title = title,
+            content = content,
+            duration = 4
+        })
+    end)
+end
+
+-- Find Ponds
+local function getAvailablePonds()
+    local ponds = {}
+    local scripted = workspace:FindFirstChild("Scripted")
+    local pondAreas = scripted and scripted:FindFirstChild("PondAreas")
+    if pondAreas then
+        for _, v in ipairs(pondAreas:GetChildren()) do
+            if v:IsA("BasePart") then
+                table.insert(ponds, v)
+            end
+        end
+    end
+    local tutAreas = scripted and scripted:FindFirstChild("TutorialAreas")
+    if tutAreas then
+        for _, t in ipairs(tutAreas:GetChildren()) do
+            for _, v in ipairs(t:GetChildren()) do
+                if v:IsA("BasePart") and string.find(v.Name, "Pond") then
+                    table.insert(ponds, v)
+                end
+            end
+        end
+    end
+    return ponds
+end
+
+local function getTargetPond()
+    local ponds = getAvailablePonds()
+    if #ponds == 0 then return nil end
+
+    if Config.SelectedPond ~= "Nearest" then
+        for _, p in ipairs(ponds) do
+            if p.Name == Config.SelectedPond then
+                return p
+            end
+        end
+    end
+
+    local hrp = getHRP()
+    if not hrp then return ponds[1] end
+
+    local closest = ponds[1]
+    local minDist = (ponds[1].Position - hrp.Position).Magnitude
+    for i = 2, #ponds do
+        local dist = (ponds[i].Position - hrp.Position).Magnitude
+        if dist < minDist then
+            minDist = dist
+            closest = ponds[i]
+        end
+    end
+    return closest
+end
+
+-- Anti AFK
+LocalPlayer.Idled:Connect(function()
+    if Config.AntiAFK then
+        VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+        task.wait(1)
+        VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    end
+end)
+
+-- Noclip loop
+RunService.Stepped:Connect(function()
+    if Config.Noclip and LocalPlayer.Character then
+        for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+-- Infinite Jump
+UserInputService.JumpRequest:Connect(function()
+    if Config.InfiniteJump then
+        local hum = getHumanoid()
+        if hum then
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end)
+
+-----------------------------------------------------------
+-- TABS
+-----------------------------------------------------------
+local TabFarm = Window:CreateTab({ name = "Auto Farm", icon = "fish" })
+local TabBase = Window:CreateTab({ name = "Base & Inventory", icon = "backpack" })
+local TabProgression = Window:CreateTab({ name = "Progression", icon = "trending-up" })
+local TabTeleport = Window:CreateTab({ name = "Teleport & Player", icon = "map-pin" })
+local TabQoL = Window:CreateTab({ name = "QoL & Settings", icon = "settings" })
+
+-----------------------------------------------------------
+-- TAB: AUTO FARM
+-----------------------------------------------------------
+TabFarm:CreateToggle({
+    name = "Auto Fish",
+    description = "Otomatis melempar pancing dan menarik ikan terus-menerus.",
+    value = false,
+    flag = "AutoFish",
+    callback = function(val)
+        Config.AutoFish = val
+        if val then
+            notify("Auto Fish", "Auto Fish Diaktifkan!")
+        end
+    end
+})
+
+TabFarm:CreateSlider({
+    name = "Click Speed (Delay)",
+    description = "Kecepatan click reel saat memancing (detik).",
+    range = { 0.05, 0.5 },
+    increment = 0.01,
+    value = 0.1,
+    suffix = "s",
+    flag = "FishClickDelay",
+    callback = function(val)
+        Config.FishClickDelay = val
+    end
+})
+
+TabFarm:CreateDropdown({
+    name = "Select Pond",
+    description = "Pilih kolam tempat memancing.",
+    options = { "Nearest", "PONDAREA1", "PONDAREA2", "Pond1" },
+    value = "Nearest",
+    flag = "SelectedPond",
+    callback = function(val)
+        Config.SelectedPond = type(val) == "table" and val[1] or val
+    end
+})
+
+TabFarm:CreateButton({
+    name = "Instant Reel Click (x10)",
+    description = "Kirim 10 klik langsung ke remote fishing.",
+    callback = function()
+        local rem = Remotes and Remotes:FindFirstChild("FishingClick")
+        if rem then
+            for i = 1, 10 do
+                rem:FireServer()
+                task.wait(0.03)
+            end
+            notify("Reel", "Terkirim 10x reel clicks!")
+        end
+    end
+})
+
+-----------------------------------------------------------
+-- TAB: BASE & INVENTORY
+-----------------------------------------------------------
+TabBase:CreateToggle({
+    name = "Auto Equip Best Characters",
+    description = "Otomatis memasang karakter terbaik ke backpack & plot.",
+    value = false,
+    flag = "AutoEquipBest",
+    callback = function(val)
+        Config.AutoEquipBest = val
+    end
+})
+
+TabBase:CreateButton({
+    name = "Equip Best Now",
+    callback = function()
+        local rem = Remotes and Remotes:FindFirstChild("BackpackEquipBest")
+        if rem then
+            rem:FireServer()
+            notify("Inventory", "Equip Best Karakter berhasil dikirim!")
+        end
+    end
+})
+
+TabBase:CreateButton({
+    name = "Pick Up All (Ambil Semua Karakter)",
+    callback = function()
+        local rem = Remotes and Remotes:FindFirstChild("BackpackPickUpAll")
+        if rem then
+            rem:FireServer()
+            notify("Base", "Semua karakter diambil ke inventory!")
+        end
+    end
+})
+
+TabBase:CreateDivider({ text = "Crates / Cases" })
+
+TabBase:CreateToggle({
+    name = "Auto Open Cases",
+    description = "Otomatis membuka case/crate jika tersedia di tas.",
+    value = false,
+    flag = "AutoOpenCases",
+    callback = function(val)
+        Config.AutoOpenCases = val
+    end
+})
+
+TabBase:CreateDropdown({
+    name = "Target Case",
+    options = { "All", "EpicCase", "MythicalCase" },
+    value = "All",
+    flag = "SelectedCase",
+    callback = function(val)
+        Config.SelectedCase = type(val) == "table" and val[1] or val
+    end
+})
+
+TabBase:CreateButton({
+    name = "Open 1x Epic Box",
+    callback = function()
+        local rem = Remotes and Remotes:FindFirstChild("CaseOpenRequest")
+        if rem then
+            local ok, res = pcall(function() return rem:InvokeServer("EpicCase", 1) end)
+            if ok and res and res.ok then
+                notify("Case Opener", "Berhasil membuka 1x Epic Box!")
+            else
+                notify("Case Opener", "Gagal atau box tidak cukup.")
+            end
+        end
+    end
+})
+
+TabBase:CreateButton({
+    name = "Open 1x Mythical Box",
+    callback = function()
+        local rem = Remotes and Remotes:FindFirstChild("CaseOpenRequest")
+        if rem then
+            local ok, res = pcall(function() return rem:InvokeServer("MythicalCase", 1) end)
+            if ok and res and res.ok then
+                notify("Case Opener", "Berhasil membuka 1x Mythical Box!")
+            else
+                notify("Case Opener", "Gagal atau box tidak cukup.")
+            end
+        end
+    end
+})
+
+-----------------------------------------------------------
+-- TAB: PROGRESSION
+-----------------------------------------------------------
+TabProgression:CreateToggle({
+    name = "Auto Claim Quests",
+    description = "Otomatis mengklaim semua quest yang selesai.",
+    value = false,
+    flag = "AutoQuests",
+    callback = function(val)
+        Config.AutoQuests = val
+    end
+})
+
+TabProgression:CreateButton({
+    name = "Claim All Quests Now",
+    callback = function()
+        local rem = Remotes and Remotes:FindFirstChild("QuestClaimAll")
+        if rem then
+            local ok, res = pcall(function() return rem:InvokeServer() end)
+            if ok and res and res.ok then
+                notify("Quest", "Semua reward quest berhasil diklaim!")
+            else
+                notify("Quest", "Tidak ada quest yang siap diklaim.")
+            end
+        end
+    end
+})
+
+TabProgression:CreateToggle({
+    name = "Auto Claim Free Rewards",
+    description = "Otomatis klaim Daily Rewards, Index, dan Spin berkala.",
+    value = false,
+    flag = "AutoDailyRewards",
+    callback = function(val)
+        Config.AutoDailyRewards = val
+    end
+})
+
+TabProgression:CreateButton({
+    name = "Claim All Index & Daily Now",
+    callback = function()
+        pcall(function()
+            if Remotes:FindFirstChild("IndexClaimAllRewards") then
+                Remotes.IndexClaimAllRewards:InvokeServer()
+            end
+            if Remotes:FindFirstChild("ClaimDailyReward") then
+                for d = 1, 7 do
+                    pcall(function() Remotes.ClaimDailyReward:InvokeServer(d) end)
+                end
+            end
+            if Remotes:FindFirstChild("Spin") then
+                Remotes.Spin:FireServer()
+            end
+        end)
+        notify("Rewards", "Semua klaim reward diproses!")
+    end
+})
+
+TabProgression:CreateDivider({ text = "Auto Rebirth & Upgrades" })
+
+TabProgression:CreateToggle({
+    name = "Auto Rebirth",
+    description = "Otomatis melakukan rebirth saat syarat terpenuhi.",
+    value = false,
+    flag = "AutoRebirth",
+    callback = function(val)
+        Config.AutoRebirth = val
+    end
+})
+
+TabProgression:CreateButton({
+    name = "Try Rebirth Now",
+    callback = function()
+        local rem = Remotes and Remotes:FindFirstChild("RebirthPurchase")
+        if rem then
+            local ok, res = pcall(function() return rem:InvokeServer() end)
+            if ok and res then
+                notify("Rebirth", "Rebirth Berhasil!")
+            else
+                notify("Rebirth", "Belum memenuhi syarat rebirth.")
+            end
+        end
+    end
+})
+
+TabProgression:CreateToggle({
+    name = "Auto Buy Upgrades",
+    description = "Otomatis upgrade stats (Luck, Faster Catch, Cash Mult, dll).",
+    value = false,
+    flag = "AutoUpgrades",
+    callback = function(val)
+        Config.AutoUpgrades = val
+    end
+})
+
+-----------------------------------------------------------
+-- TAB: TELEPORT & PLAYER
+-----------------------------------------------------------
+TabTeleport:CreateButton({
+    name = "Teleport to Pond 1 (Main Pond)",
+    callback = function()
+        local hrp = getHRP()
+        if hrp then
+            hrp.CFrame = CFrame.new(5617.58, 58, 1275)
+            notify("Teleport", "Teleport ke Pond 1!")
+        end
+    end
+})
+
+TabTeleport:CreateButton({
+    name = "Teleport to Pond 2",
+    callback = function()
+        local hrp = getHRP()
+        if hrp then
+            hrp.CFrame = CFrame.new(5273.30, 48, 1255.87)
+            notify("Teleport", "Teleport ke Pond 2!")
+        end
+    end
+})
+
+TabTeleport:CreateButton({
+    name = "Teleport to My Base / Plot",
+    callback = function()
+        local plotName = LocalPlayer:GetAttribute("PlotName")
+        local hrp = getHRP()
+        if plotName and hrp then
+            local plot = workspace:FindFirstChild("PlayerPlots") and workspace.PlayerPlots:FindFirstChild(plotName)
+            if plot and plot:FindFirstChild("Start") then
+                hrp.CFrame = plot.Start.CFrame + Vector3.new(0, 3, 0)
+                notify("Teleport", "Teleport ke base: " .. plotName)
+            end
+        end
+    end
+})
+
+TabTeleport:CreateDivider({ text = "Movement" })
+
+TabTeleport:CreateSlider({
+    name = "WalkSpeed",
+    range = { 16, 120 },
+    increment = 1,
+    value = 16,
+    flag = "WalkSpeed",
+    callback = function(val)
+        Config.WalkSpeed = val
+        local hum = getHumanoid()
+        if hum then hum.WalkSpeed = val end
+    end
+})
+
+TabTeleport:CreateSlider({
+    name = "JumpPower",
+    range = { 50, 200 },
+    increment = 5,
+    value = 50,
+    flag = "JumpPower",
+    callback = function(val)
+        Config.JumpPower = val
+        local hum = getHumanoid()
+        if hum then hum.JumpPower = val end
+    end
+})
+
+TabTeleport:CreateToggle({
+    name = "Infinite Jump",
+    value = false,
+    flag = "InfiniteJump",
+    callback = function(val)
+        Config.InfiniteJump = val
+    end
+})
+
+TabTeleport:CreateToggle({
+    name = "Noclip",
+    value = false,
+    flag = "Noclip",
+    callback = function(val)
+        Config.Noclip = val
+    end
+})
+
+-----------------------------------------------------------
+-- TAB: QOL & SETTINGS
+-----------------------------------------------------------
+TabQoL:CreateToggle({
+    name = "Anti-AFK",
+    description = "Mencegah disconnect karena idle 20 menit.",
+    value = true,
+    flag = "AntiAFK",
+    callback = function(val)
+        Config.AntiAFK = val
+    end
+})
+
+TabQoL:CreateToggle({
+    name = "Rare Catch Notifier",
+    description = "Tampilkan notifikasi banner saat mendapatkan karakter langka.",
+    value = true,
+    flag = "RareAlert",
+    callback = function(val)
+        Config.RareAlert = val
+    end
+})
+
+-- Listen for catch rewards
+pcall(function()
+    local catchRemote = Remotes and Remotes:FindFirstChild("ShowCatchReward")
+    if catchRemote then
+        catchRemote.OnClientEvent:Connect(function(data)
+            if Config.RareAlert and typeof(data) == "table" then
+                local charName = tostring(data.Name or data.Character or "Unknown")
+                local rarity = tostring(data.Rarity or "")
+                notify("Catch!", "Mendapatkan: " .. charName .. " [" .. rarity .. "]")
+            end
+        end)
+    end
+end)
+
+-----------------------------------------------------------
+-- BACKGROUND LOOPS
+-----------------------------------------------------------
+-- Auto Fish Worker Loop
+task.spawn(function()
+    while true do
+        task.wait(0.2)
+        if Config.AutoFish then
+            pcall(function()
+                local pond = getTargetPond()
+                local hrp = getHRP()
+                if pond and hrp then
+                    -- If standing too far (> 40 studs), bring closer to edge
+                    local dist = (pond.Position - hrp.Position).Magnitude
+                    if dist > 35 then
+                        hrp.CFrame = pond.CFrame + Vector3.new(0, 4, 15)
+                        task.wait(0.3)
+                    end
+
+                    -- Use game's native auto-fish if available, else fire remotes
+                    local renvG = nil
+                    pcall(function() renvG = getrenv()._G end)
+                    if renvG and type(renvG.__AF_SetForcedAutoFish) == "function" and type(renvG.__AF_StartFishingAt) == "function" then
+                        renvG.__AF_SetForcedAutoFish(true)
+                        renvG.__AF_StartFishingAt(pond.Position, true)
+                    else
+                        local reqRem = Remotes and Remotes:FindFirstChild("FishingRequestStart")
+                        if reqRem then
+                            reqRem:FireServer(pond, pond.Position)
+                        end
+                    end
+
+                    -- Reel clicks
+                    local clickRem = Remotes and Remotes:FindFirstChild("FishingClick")
+                    if clickRem then
+                        for i = 1, 8 do
+                            if not Config.AutoFish then break end
+                            clickRem:FireServer()
+                            task.wait(Config.FishClickDelay)
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- Auto Equip Best Loop
+task.spawn(function()
+    while true do
+        task.wait(5)
+        if Config.AutoEquipBest then
+            pcall(function()
+                local rem = Remotes and Remotes:FindFirstChild("BackpackEquipBest")
+                if rem then rem:FireServer() end
+            end)
+        end
+    end
+end)
+
+-- Auto Quests Loop
+task.spawn(function()
+    while true do
+        task.wait(15)
+        if Config.AutoQuests then
+            pcall(function()
+                local rem = Remotes and Remotes:FindFirstChild("QuestClaimAll")
+                if rem then rem:InvokeServer() end
+            end)
+        end
+    end
+end)
+
+-- Auto Daily & Free Rewards Loop
+task.spawn(function()
+    while true do
+        task.wait(60)
+        if Config.AutoDailyRewards then
+            pcall(function()
+                if Remotes:FindFirstChild("IndexClaimAllRewards") then
+                    Remotes.IndexClaimAllRewards:InvokeServer()
+                end
+                if Remotes:FindFirstChild("ClaimDailyReward") then
+                    for d = 1, 7 do
+                        pcall(function() Remotes.ClaimDailyReward:InvokeServer(d) end)
+                    end
+                end
+                if Remotes:FindFirstChild("Spin") then
+                    Remotes.Spin:FireServer()
+                end
+            end)
+        end
+    end
+end)
+
+-- Auto Upgrades Loop
+task.spawn(function()
+    local upgradeKeys = {
+        "T1O1", "T1O2", "T2O1", "T2O2", "T2O3",
+        "T3O1", "T3O2", "T3O3", "T4O1", "T4O2", "T4O3"
+    }
+    while true do
+        task.wait(8)
+        if Config.AutoUpgrades then
+            pcall(function()
+                local rem = Remotes and Remotes:FindFirstChild("UpgradesStorePurchase")
+                if rem then
+                    for _, key in ipairs(upgradeKeys) do
+                        pcall(function() rem:InvokeServer(key) end)
+                        task.wait(0.1)
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- Auto Rebirth Loop
+task.spawn(function()
+    while true do
+        task.wait(10)
+        if Config.AutoRebirth then
+            pcall(function()
+                local rem = Remotes and Remotes:FindFirstChild("RebirthPurchase")
+                if rem then rem:InvokeServer() end
+            end)
+        end
+    end
+end)
+
+-- Auto Cases Loop
+task.spawn(function()
+    while true do
+        task.wait(4)
+        if Config.AutoOpenCases then
+            pcall(function()
+                local rem = Remotes and Remotes:FindFirstChild("CaseOpenRequest")
+                if rem then
+                    if Config.SelectedCase == "All" or Config.SelectedCase == "EpicCase" then
+                        rem:InvokeServer("EpicCase", 1)
+                    end
+                    if Config.SelectedCase == "All" or Config.SelectedCase == "MythicalCase" then
+                        rem:InvokeServer("MythicalCase", 1)
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- Character respawn handler to maintain Walkspeed & JumpPower
+LocalPlayer.CharacterAdded:Connect(function(newChar)
+    task.wait(0.5)
+    local hum = newChar:WaitForChild("Humanoid", 5)
+    if hum then
+        hum.WalkSpeed = Config.WalkSpeed
+        hum.JumpPower = Config.JumpPower
+    end
+end)
+
+notify("Fish an Anime RNG Hub", "Script loaded successfully!")
